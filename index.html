@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TourneyHub - Multi-Tournament Leaderboard</title>
+  <title>TourneyHub - Multi-Tournament Leaderboard (Local Save)</title>
   <!-- React & ReactDOM (UMD) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -16,16 +16,40 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useMemo } = React;
+    const { useState, useEffect, useMemo } = React;
+
+    // Custom hook to sync state with the browser's localStorage
+    function useLocalStorage(key, initialValue) {
+      const [storedValue, setStoredValue] = useState(() => {
+        try {
+          const item = window.localStorage.getItem(key);
+          return item ? JSON.parse(item) : initialValue;
+        } catch (error) {
+          console.warn(`Error reading localStorage key "${key}":`, error);
+          return initialValue;
+        }
+      });
+
+      useEffect(() => {
+        try {
+          window.localStorage.setItem(key, JSON.stringify(storedValue));
+        } catch (error) {
+          console.warn(`Error setting localStorage key "${key}":`, error);
+        }
+      }, [key, storedValue]);
+
+      return [storedValue, setStoredValue];
+    }
 
     function App() {
-      const [activeTab, setActiveTab] = useState('dashboard');
-      const [players, setPlayers] = useState([]);
-      const [bulkInput, setBulkInput] = useState('');
-      const [numGames, setNumGames] = useState(3);
+      // Replaced standard useState with useLocalStorage for persistent data
+      const [activeTab, setActiveTab] = useLocalStorage('tourney_activeTab', 'dashboard');
+      const [players, setPlayers] = useLocalStorage('tourney_players', []);
+      const [bulkInput, setBulkInput] = useLocalStorage('tourney_bulkInput', '');
+      const [numGames, setNumGames] = useLocalStorage('tourney_numGames', 3);
       
-      const [tournaments, setTournaments] = useState([]);
-      const [activeGameId, setActiveGameId] = useState(0);
+      const [tournaments, setTournaments] = useLocalStorage('tourney_tournaments', []);
+      const [activeGameId, setActiveGameId] = useLocalStorage('tourney_activeGameId', 0);
 
       const shuffle = (array) => [...array].sort(() => Math.random() - 0.5);
 
@@ -246,6 +270,18 @@
 
       }, [players, tournaments]);
 
+      // Handle resetting local storage
+      const resetEverything = () => {
+        if(!confirm("Are you sure? This will wipe all saved tournament data from this browser.")) return;
+        setPlayers([]); 
+        setTournaments([]);
+        setBulkInput('');
+        setNumGames(3);
+        setActiveTab('dashboard');
+        setActiveGameId(0);
+        window.localStorage.clear();
+      };
+
 
       return (
         <div className="min-h-screen flex flex-col md:flex-row font-sans text-slate-200">
@@ -284,7 +320,7 @@
                   ) : (
                     <div className="space-y-4">
                       <p className="text-emerald-400 font-medium">✅ {players.length} Players Locked In</p>
-                      <button onClick={() => { setPlayers([]); setTournaments([]); }} className="text-red-400 text-sm hover:underline">Reset Everything (Danger)</button>
+                      <button onClick={resetEverything} className="text-red-400 text-sm hover:underline">Reset Everything (Danger)</button>
                     </div>
                   )}
                 </div>
