@@ -18,7 +18,6 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    // Custom hook to sync state with the browser's localStorage
     function useLocalStorage(key, initialValue) {
       const [storedValue, setStoredValue] = useState(() => {
         try {
@@ -42,7 +41,6 @@
     }
 
     function App() {
-      // Replaced standard useState with useLocalStorage for persistent data
       const [activeTab, setActiveTab] = useLocalStorage('tourney_activeTab', 'dashboard');
       const [players, setPlayers] = useLocalStorage('tourney_players', []);
       const [bulkInput, setBulkInput] = useLocalStorage('tourney_bulkInput', '');
@@ -56,32 +54,44 @@
       const generateRound1 = (pool) => {
         const activePool = pool.filter(p => !p.droppedOut);
         const shuffled = shuffle(activePool);
-        const numMatches = shuffled.length <= 16 ? 4 : 5;
+        const len = shuffled.length;
         
-        const matches = Array.from({ length: numMatches }, (_, i) => ({
-          id: `r1_m${i + 1}`,
-          maxWinners: 2,
-          participants: []
-        }));
+        // Target exactly 8 players to advance to Round 2
+        const targetWinners = Math.min(8, len);
+        
+        // Max 8 players per match
+        const numMatches = Math.ceil(len / 8); 
+        
+        const sizes = Array(numMatches).fill(Math.floor(len / numMatches));
+        for(let i=0; i<len % numMatches; i++) sizes[i]++;
+        
+        const winnersConfig = Array(numMatches).fill(Math.floor(targetWinners / numMatches));
+        for(let i=0; i<targetWinners % numMatches; i++) winnersConfig[i]++;
 
-        shuffled.forEach((p, i) => {
-          matches[i % numMatches].participants.push({ ...p, score: '', isWinner: false });
-        });
+        const matches = [];
+        let currentIndex = 0;
+        
+        for (let i = 0; i < numMatches; i++) {
+            const matchParticipants = shuffled.slice(currentIndex, currentIndex + sizes[i]).map(p => ({ ...p, score: '', isWinner: false }));
+            matches.push({
+                id: `r1_m${i + 1}`,
+                maxWinners: winnersConfig[i],
+                participants: matchParticipants
+            });
+            currentIndex += sizes[i];
+        }
 
         return matches;
       };
 
       const generateRound2 = (r1Winners) => {
-        const matches = [];
-        if (r1Winners.length === 8) {
-          matches.push({ id: `r2_m1`, maxWinners: 2, participants: r1Winners.slice(0, 4).map(p => ({ ...p, score: '', isWinner: false })) });
-          matches.push({ id: `r2_m2`, maxWinners: 2, participants: r1Winners.slice(4, 8).map(p => ({ ...p, score: '', isWinner: false })) });
-        } else {
-          matches.push({ id: `r2_m1`, maxWinners: 2, participants: r1Winners.slice(0, 4).map(p => ({ ...p, score: '', isWinner: false })) });
-          matches.push({ id: `r2_m2`, maxWinners: 1, participants: r1Winners.slice(4, 7).map(p => ({ ...p, score: '', isWinner: false })) });
-          matches.push({ id: `r2_m3`, maxWinners: 1, participants: r1Winners.slice(7, 10).map(p => ({ ...p, score: '', isWinner: false })) });
-        }
-        return matches;
+        // R1 Winners is now always 8 players (if starting pool >= 8)
+        // Round 2 is exactly 1 match of 8 players, where top 4 advance.
+        return [{
+          id: `r2_m1`,
+          maxWinners: 4, 
+          participants: r1Winners.map(p => ({ ...p, score: '', isWinner: false }))
+        }];
       };
 
       const initializePool = () => {
@@ -270,7 +280,6 @@
 
       }, [players, tournaments]);
 
-      // Handle resetting local storage
       const resetEverything = () => {
         if(!confirm("Are you sure? This will wipe all saved tournament data from this browser.")) return;
         setPlayers([]); 
@@ -339,7 +348,7 @@
 
                 {tournaments.filter(t => t.id === activeGameId).map(t => (
                   <div key={t.id} className="bg-slate-800 border border-slate-700 rounded-xl p-6 overflow-x-auto">
-                    <div className="flex justify-between items-center mb-6 min-w-[800px]">
+                    <div className="flex justify-between items-center mb-6 min-w-[600px] md:min-w-full">
                       <div>
                         <input 
                           type="text" 
@@ -363,21 +372,21 @@
                       </div>
                     </div>
 
-                    <div className="flex gap-8 min-w-[800px]">
+                    <div className="flex gap-4 min-w-[600px] md:min-w-full">
                       {t.rounds.map((round, rIndex) => (
-                        <div key={rIndex} className="flex-1 min-w-[340px] space-y-4">
+                        <div key={rIndex} className="flex-1 min-w-[200px] md:min-w-[250px] space-y-4">
                           <h4 className="font-semibold text-slate-300 border-b border-slate-700 pb-2">
                             {rIndex === 0 ? "Round 1" : rIndex === 1 ? "Round 2" : "Grand Finals"}
                           </h4>
                           
                           {round.map((match, mIndex) => (
-                            <div key={match.id} className="bg-slate-900 border border-slate-700 rounded-lg p-3">
+                            <div key={match.id} className="bg-slate-900 border border-slate-700 rounded-lg p-2 md:p-3">
                               <div className="text-xs text-slate-400 mb-2">Match {mIndex + 1} (Top {match.maxWinners})</div>
                               <div className="space-y-2">
                                 {match.participants.map(p => {
                                   const isDropped = players.find(x => x.id === p.id)?.droppedOut;
                                   return (
-                                    <div key={p.id} className={`flex items-center gap-2 p-2 rounded ${p.isWinner ? 'bg-indigo-900/40' : 'bg-slate-800'} ${isDropped ? 'opacity-50' : ''}`}>
+                                    <div key={p.id} className={`flex items-center gap-1 md:gap-2 p-1 md:p-2 rounded ${p.isWinner ? 'bg-indigo-900/40' : 'bg-slate-800'} ${isDropped ? 'opacity-50' : ''}`}>
                                       <input 
                                         type="checkbox" 
                                         checked={p.isWinner}
@@ -385,14 +394,14 @@
                                         onChange={(e) => updateParticipant(t.id, rIndex, match.id, p.id, 'isWinner', e.target.checked)}
                                         className="w-4 h-4"
                                       />
-                                      <span className="flex-1 text-sm truncate">{p.name} {isDropped && '(Dropped)'}</span>
+                                      <span className="flex-1 text-xs md:text-sm truncate">{p.name} {isDropped && '(Dropped)'}</span>
                                       <input 
                                         type="text" 
                                         placeholder="Score"
                                         value={p.score}
                                         disabled={t.status !== 'Live' || isDropped}
                                         onChange={(e) => updateParticipant(t.id, rIndex, match.id, p.id, 'score', e.target.value)}
-                                        className="w-16 text-xs bg-slate-900 border border-slate-600 rounded px-1 outline-none"
+                                        className="w-12 md:w-16 text-xs bg-slate-900 border border-slate-600 rounded px-1 outline-none"
                                       />
                                       <button onClick={() => dropPlayer(p.id)} className="text-red-400 text-xs hover:text-red-300">🗑️</button>
                                     </div>
